@@ -62,7 +62,7 @@ async function askUrl() {
 function compute(bin) {
   const lines = bin.split("\n");
   const today = ymd(new Date());
-  const days = {};
+  const days = {}, dayOrd = {};
   const s = { paid: 0, unpaid: 0, toShip: 0, shipped: 0, todayKs: 0, sam: 0, kal: 0, rev: 0 };
   const orders = new Set(), todayOrders = new Set(), unpaidOrders = new Set();
   let lastOrder = "";
@@ -78,6 +78,7 @@ function compute(bin) {
     const n = num(amt);
     const d = (date || "").slice(0, 10);
     days[d] = (days[d] || 0) + n;
+    (dayOrd[d] = dayOrd[d] || new Set()).add(code);
     if (d === today) { s.todayKs += n; todayOrders.add(code); }
     if ((date || "") > lastOrder) lastOrder = date;
 
@@ -96,6 +97,8 @@ function compute(bin) {
   s.unpaidOrders = unpaidOrders.size;
   s.rev = Math.round(s.rev);
   s.days = days;
+  s.dayOrders = {};
+  Object.keys(dayOrd).forEach(k => s.dayOrders[k] = dayOrd[k].size);
   s.lastOrder = lastOrder;
   return s;
 }
@@ -220,36 +223,44 @@ function build(s, family) {
   if (!small) txt(head, (s.stale ? "⚠︎ " : "") + new Date(s.fetched).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" }), Font.systemFont(10), C.dim);
   w.addSpacer(small ? 2 : 6);
 
-  // počet kusů + včera
+  // dnes (velké) + včera (menší) – počet objednávek
+  const od = s.dayOrders || {};
+  const tOrd = od[ymd(new Date())] || 0;
+  const yOrd = od[ymd(y)] || 0;
   const row = w.addStack();
   row.bottomAlignContent();
-  const big = row.addStack();
+  const left = row.addStack();
+  left.layoutVertically();
+  const medium = family === "medium";
+  if (!medium) txt(left, "dnes", Font.semiboldSystemFont(11), C.pink);
+  const big = left.addStack();
   big.bottomAlignContent();
-  txt(big, fmt(s.paid), Font.heavyRoundedSystemFont(small ? 40 : family === "large" ? 46 : 36));
-  big.addSpacer(3);
-  txt(big, "ks", Font.semiboldSystemFont(15), C.dim);
+  txt(big, fmt(tOrd), Font.heavyRoundedSystemFont(small ? 40 : family === "large" ? 50 : 36));
+  big.addSpacer(4);
+  txt(big, "obj.", Font.semiboldSystemFont(14), C.dim);
+  if (medium) { big.addSpacer(4); txt(big, "dnes", Font.semiboldSystemFont(14), C.pink); }
   if (!small) {
     row.addSpacer();
     const yv = row.addStack();
     yv.layoutVertically();
     const l1 = yv.addStack(); l1.addSpacer(); txt(l1, "včera", Font.systemFont(11), C.dim);
-    const l2 = yv.addStack(); l2.addSpacer(); txt(l2, "+" + fmt(yKs) + " ks", Font.heavyRoundedSystemFont(family === "large" ? 24 : 20), C.pink);
+    const l2 = yv.addStack(); l2.addSpacer(); txt(l2, fmt(yOrd) + " obj.", Font.boldRoundedSystemFont(family === "large" ? 22 : 18), C.dim);
   } else {
-    txt(w, "včera +" + fmt(yKs) + " ks", Font.boldSystemFont(13), C.pink);
+    txt(w, "včera " + fmt(yOrd) + " obj.", Font.semiboldSystemFont(12), C.dim);
   }
 
   // graf (střední a velký)
   if (!small) {
     w.addSpacer(family === "large" ? 14 : 4);
-    const ch = family === "large" ? 205 : 46;
-    const img = w.addImage(bars(lastNDays(s.days, 14), 305, ch, family === "large" ? true : "values"));
+    const ch = family === "large" ? 190 : 42;
+    const img = w.addImage(bars(lastNDays(s.dayOrders || s.days, 14), 305, ch, family === "large" ? true : "values"));
     img.imageSize = new Size(305, ch);
   }
 
   // progress bar
   w.addSpacer();
   const pr = w.addStack();
-  txt(pr, "z " + fmt(GOAL) + " ks", Font.systemFont(10), C.dim);
+  txt(pr, fmt(s.paid) + " ks z " + fmt(GOAL), Font.systemFont(10), C.dim);
   pr.addSpacer();
   txt(pr, pct + " %", Font.boldSystemFont(10), C.text);
   w.addSpacer(3);
